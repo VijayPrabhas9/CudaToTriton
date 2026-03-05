@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CUDA → Triton Cheat Sheet</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2333;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent-cuda: #76b900;
+    --accent-triton: #58a6ff;
+    --accent-warn: #f0883e;
+    --accent-pink: #f778ba;
+    --accent-purple: #bc8cff;
+    --code-bg: #0d1117;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    padding: 2.5rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2.5rem;
+  }
+
+  header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.3rem;
+  }
+
+  header h1 .cuda { color: var(--accent-cuda); }
+  header h1 .arrow { color: var(--text-dim); margin: 0 0.3rem; }
+  header h1 .triton { color: var(--accent-triton); }
+
+  header p {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+  }
+
+  /* Blog intro */
+  .blog-intro {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem 1.8rem;
+    margin-bottom: 2.5rem;
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: var(--text-dim);
+  }
+
+  .blog-intro strong {
+    color: var(--text);
+  }
+
+  .blog-intro a {
+    color: var(--accent-triton);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(88,166,255,0.3);
+    transition: border-color 0.2s;
+  }
+
+  .blog-intro a:hover {
+    border-color: var(--accent-triton);
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.8rem;
+  }
+  .tag-cuda { background: rgba(118,185,0,0.15); color: var(--accent-cuda); }
+  .tag-triton { background: rgba(88,166,255,0.15); color: var(--accent-triton); }
+
+  /* Concept Mapping Table */
+  .mapping-section { margin-bottom: 2.5rem; }
+
+  .mapping-section h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--accent-triton);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  th {
+    text-align: left;
+    padding: 0.8rem 1rem;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  th:first-child { width: 22%; }
+  th:nth-child(2) { width: 39%; color: var(--accent-cuda); }
+  th:nth-child(3) { width: 39%; color: var(--accent-triton); }
+
+  td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  td:first-child { font-weight: 600; color: var(--accent-purple); }
+  tr:last-child td { border-bottom: none; }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    background: var(--code-bg);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    color: var(--accent-pink);
+  }
+
+  /* Side by Side Code */
+  .code-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .code-block {
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .code-block-header {
+    padding: 0.6rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .code-block-header .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .code-block.cuda .code-block-header { background: rgba(118,185,0,0.08); color: var(--accent-cuda); }
+  .code-block.cuda .dot { background: var(--accent-cuda); }
+  .code-block.triton .code-block-header { background: rgba(88,166,255,0.08); color: var(--accent-triton); }
+  .code-block.triton .dot { background: var(--accent-triton); }
+
+  pre {
+    padding: 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    color: var(--text);
+  }
+
+  .comment { color: var(--text-dim); }
+  .keyword { color: var(--accent-pink); }
+  .func { color: var(--accent-triton); }
+  .string { color: var(--accent-cuda); }
+  .number { color: var(--accent-warn); }
+
+  /* Key Insights */
+  .insights {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .insight-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.2rem;
+    transition: border-color 0.2s;
+  }
+  .insight-card:hover { border-color: var(--accent-triton); }
+
+  .insight-card h3 {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .insight-card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .insight-icon {
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
+  }
+
+  /* API Quick Ref */
+  .api-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .api-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+
+  .api-card h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent-triton);
+    margin-bottom: 0.6rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .api-card p {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .warn-box {
+    background: rgba(240,136,62,0.08);
+    border: 1px solid rgba(240,136,62,0.3);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 2.5rem;
+    font-size: 0.85rem;
+  }
+  .warn-box strong { color: var(--accent-warn); }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 0.6rem;
+  }
+
+  /* Up Next section */
+  .up-next {
+    background: linear-gradient(135deg, rgba(88,166,255,0.06) 0%, rgba(188,140,255,0.06) 100%);
+    border: 1px solid rgba(88,166,255,0.25);
+    border-radius: 8px;
+    padding: 1.5rem 1.8rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .up-next h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 0.8rem;
+    padding-left: 0.5rem;
+    border-left: 3px solid var(--accent-purple);
+  }
+
+  .up-next p {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 0.6rem;
+  }
+
+  .up-next p:last-child {
+    margin-bottom: 0;
+  }
+
+  .up-next strong {
+    color: var(--text);
+  }
+
+  .up-next code {
+    font-size: 0.8rem;
+  }
+
+  .series-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    background: rgba(188,140,255,0.15);
+    color: var(--accent-purple);
+    margin-bottom: 0.8rem;
+  }
+
+  footer {
+    text-align: center;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+  }
+
+  footer a {
+    color: var(--accent-triton);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(88,166,255,0.3);
+  }
+
+  footer a:hover {
+    border-color: var(--accent-triton);
+  }
+
+  @media (max-width: 768px) {
+    .code-compare, .insights, .api-grid { grid-template-columns: 1fr; }
+    body { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="cuda">CUDA</span><span class="arrow">→</span><span class="triton">Triton</span></h1>
+  <p>Complete mental model mapping for CUDA practitioners learning Triton</p>
+</header>
+
+<!-- BLOG INTRO -->
+<div class="blog-intro">
+  <strong>Hey, I'm Prabhas</strong> — a CS grad student at Georgia Tech focused on GPU performance engineering.
+  I spend most of my time inside Nsight Compute staring at warp stall breakdowns and sector efficiency numbers.
+  Recently, I started learning <a href="https://triton-lang.org">Triton</a> and found that the biggest hurdle wasn't the API itself — it was
+  rewiring my CUDA mental model. Triton doesn't think in threads; it thinks in <em>blocks</em>. Shared memory?
+  Automatic. Syncthreads? Gone. Once that shift clicks, the rest follows fast.<br><br>
+  I put this cheat sheet together as the reference I wished I had on day one: every CUDA concept mapped to its Triton
+  equivalent, with side-by-side code to make it concrete. If you're coming from CUDA and picking up Triton for kernel
+  development — whether for LLM inference, fused ops, or custom attention — this is for you.
+</div>
+
+<!-- KEY PARADIGM SHIFT -->
+<div class="mapping-section">
+  <h2>The Paradigm Shift</h2>
+  <div class="insights">
+    <div class="insight-card">
+      <div class="insight-icon">🧩</div>
+      <h3>Threads → Programs</h3>
+      <p>In CUDA, you think in threads. In Triton, you think in <strong>program instances</strong>. Each program processes an entire <strong>block/tile</strong> of data, not a single element.</p>
+    </div>
+    <div class="insight-card">
+      <div class="insight-icon">🧠</div>
+      <h3>Manual → Automatic</h3>
+      <p>Shared memory, coalescing, synchronization, and tensor core scheduling are all <strong>handled by the compiler</strong>. You never write <code>__shared__</code> or <code>__syncthreads()</code>.</p>
+    </div>
+    <div class="insight-card">
+      <div class="insight-icon">⚡</div>
+      <h3>Scalar → Block Ops</h3>
+      <p>Every operation is on a <strong>block of values</strong> (like NumPy). <code>tl.load</code> fetches a tile, arithmetic operates on the whole tile, <code>tl.store</code> writes a tile.</p>
+    </div>
+  </div>
+</div>
+
+<!-- CONCEPT MAPPING TABLE -->
+<div class="mapping-section">
+  <h2>Concept Mapping</h2>
+  <table>
+    <tr><th>Concept</th><th>CUDA</th><th>Triton</th></tr>
+    <tr>
+      <td>Parallel unit</td>
+      <td>Thread (scalar)</td>
+      <td>Program instance (operates on a block)</td>
+    </tr>
+    <tr>
+      <td>Identity</td>
+      <td><code>threadIdx.x + blockIdx.x * blockDim.x</code></td>
+      <td><code>tl.program_id(axis)</code></td>
+    </tr>
+    <tr>
+      <td>Index range</td>
+      <td>Single index per thread</td>
+      <td><code>tl.arange(0, BLOCK_SIZE)</code> → vector of indices</td>
+    </tr>
+    <tr>
+      <td>Launch config</td>
+      <td><code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code></td>
+      <td><code>kernel[(grid,)](...)</code> — no block dim needed</td>
+    </tr>
+    <tr>
+      <td>Block size</td>
+      <td>Runtime parameter (blockDim)</td>
+      <td><code>BLOCK_SIZE: tl.constexpr</code> — compile-time constant</td>
+    </tr>
+    <tr>
+      <td>Load data</td>
+      <td><code>x[idx]</code> (single element)</td>
+      <td><code>tl.load(ptr + offsets, mask=...)</code> (entire block)</td>
+    </tr>
+    <tr>
+      <td>Store data</td>
+      <td><code>out[idx] = val</code></td>
+      <td><code>tl.store(ptr + offsets, val, mask=...)</code></td>
+    </tr>
+    <tr>
+      <td>Bounds checking</td>
+      <td><code>if (idx &lt; N)</code></td>
+      <td><code>mask = offsets &lt; N</code> in load/store</td>
+    </tr>
+    <tr>
+      <td>Shared memory</td>
+      <td><code>__shared__ float s[256];</code></td>
+      <td>Automatic — compiler manages SRAM</td>
+    </tr>
+    <tr>
+      <td>Synchronization</td>
+      <td><code>__syncthreads()</code></td>
+      <td>Automatic — not needed</td>
+    </tr>
+    <tr>
+      <td>Reductions</td>
+      <td>Warp shuffles + tree reduction</td>
+      <td><code>tl.sum(x, axis=0)</code>, <code>tl.max(x, axis=0)</code></td>
+    </tr>
+    <tr>
+      <td>Matrix multiply</td>
+      <td><code>wmma</code> intrinsics or manual tiling</td>
+      <td><code>tl.dot(a, b)</code> — auto tensor cores</td>
+    </tr>
+    <tr>
+      <td>Math functions</td>
+      <td><code>expf()</code>, <code>logf()</code>, etc.</td>
+      <td><code>tl.exp()</code>, <code>tl.log()</code>, etc.</td>
+    </tr>
+    <tr>
+      <td>Conditionals</td>
+      <td><code>if/else</code> (warp divergence)</td>
+      <td><code>tl.where(cond, true_val, false_val)</code></td>
+    </tr>
+    <tr>
+      <td>Atomic ops</td>
+      <td><code>atomicAdd(&addr, val)</code></td>
+      <td><code>tl.atomic_add(ptr, val)</code></td>
+    </tr>
+    <tr>
+      <td>Type casting</td>
+      <td><code>(float)x</code> or <code>__float2half()</code></td>
+      <td><code>x.to(tl.float16)</code></td>
+    </tr>
+    <tr>
+      <td>Autotuning</td>
+      <td>Manual launch config sweeps</td>
+      <td><code>@triton.autotune(configs=[...])</code></td>
+    </tr>
+    <tr>
+      <td>Debugging</td>
+      <td><code>printf()</code> in kernel</td>
+      <td><code>TRITON_INTERPRET=1</code> + Python breakpoints</td>
+    </tr>
+    <tr>
+      <td>Profiling</td>
+      <td>Nsight Compute/Systems</td>
+      <td><code>triton.testing.do_bench()</code> + Nsight</td>
+    </tr>
+  </table>
+</div>
+
+<!-- SIDE BY SIDE: Vector Add -->
+<div class="mapping-section">
+  <h2>Side by Side: Vector Addition</h2>
+  <div class="code-compare">
+    <div class="code-block cuda">
+      <div class="code-block-header"><span class="dot"></span> CUDA</div>
+      <pre><span class="keyword">__global__</span> <span class="keyword">void</span> <span class="func">add_kernel</span>(
+    <span class="keyword">float</span>* x, <span class="keyword">float</span>* y,
+    <span class="keyword">float</span>* out, <span class="keyword">int</span> N) {
+
+  <span class="comment">// Each thread: one element</span>
+  <span class="keyword">int</span> idx = blockIdx.x * blockDim.x
+            + threadIdx.x;
+
+  <span class="comment">// Bounds check</span>
+  <span class="keyword">if</span> (idx &lt; N) {
+    out[idx] = x[idx] + y[idx];
+  }
+}
+
+<span class="comment">// Launch</span>
+add_kernel&lt;&lt;&lt;(N+<span class="number">255</span>)/<span class="number">256</span>, <span class="number">256</span>&gt;&gt;&gt;(
+    x, y, out, N);</pre>
+    </div>
+    <div class="code-block triton">
+      <div class="code-block-header"><span class="dot"></span> Triton</div>
+      <pre><span class="keyword">@triton.jit</span>
+<span class="keyword">def</span> <span class="func">add_kernel</span>(
+    x_ptr, y_ptr, out_ptr, N,
+    BLOCK: <span class="func">tl.constexpr</span>):
+
+  <span class="comment"># Each program: BLOCK elements</span>
+  pid = <span class="func">tl.program_id</span>(<span class="number">0</span>)
+  offs = pid * BLOCK + <span class="func">tl.arange</span>(<span class="number">0</span>, BLOCK)
+
+  <span class="comment"># Mask replaces if-statement</span>
+  mask = offs &lt; N
+  x = <span class="func">tl.load</span>(x_ptr + offs, mask=mask)
+  y = <span class="func">tl.load</span>(y_ptr + offs, mask=mask)
+  <span class="func">tl.store</span>(out_ptr + offs, x + y, mask=mask)
+
+<span class="comment"># Launch</span>
+grid = (<span class="func">triton.cdiv</span>(N, <span class="number">1024</span>),)
+add_kernel[grid](x, y, out, N, BLOCK=<span class="number">1024</span>)</pre>
+    </div>
+  </div>
+</div>
+
+<!-- SIDE BY SIDE: Row-wise Softmax -->
+<div class="mapping-section">
+  <h2>Side by Side: Row Softmax (Reduction Pattern)</h2>
+  <div class="code-compare">
+    <div class="code-block cuda">
+      <div class="code-block-header"><span class="dot"></span> CUDA — 50+ lines typical</div>
+      <pre><span class="comment">// Need: shared memory for reduction,
+// warp shuffles for final reduce,
+// two passes (max then exp/sum),
+// __syncthreads() between passes,
+// manual coalescing of row loads,
+// bank conflict avoidance...</span>
+
+<span class="keyword">__shared__ float</span> smax[<span class="number">256</span>];
+<span class="keyword">__shared__ float</span> ssum[<span class="number">256</span>];
+
+<span class="comment">// Pass 1: find max (tree reduction)</span>
+<span class="comment">// Pass 2: exp(x - max) and sum</span>
+<span class="comment">// Pass 3: normalize by sum</span>
+<span class="comment">// ... ~60 lines of careful code</span></pre>
+    </div>
+    <div class="code-block triton">
+      <div class="code-block-header"><span class="dot"></span> Triton — Clean & complete</div>
+      <pre><span class="keyword">@triton.jit</span>
+<span class="keyword">def</span> <span class="func">softmax_kernel</span>(
+    in_ptr, out_ptr, n_cols,
+    stride, BLOCK: <span class="func">tl.constexpr</span>):
+
+  row = <span class="func">tl.program_id</span>(<span class="number">0</span>)
+  offs = <span class="func">tl.arange</span>(<span class="number">0</span>, BLOCK)
+  mask = offs &lt; n_cols
+
+  <span class="comment"># Load entire row as a block</span>
+  ptrs = in_ptr + row * stride + offs
+  x = <span class="func">tl.load</span>(ptrs, mask=mask,
+              other=<span class="number">-float('inf')</span>)
+
+  <span class="comment"># All reductions: one-liners!</span>
+  x_max = <span class="func">tl.max</span>(x, axis=<span class="number">0</span>)
+  x = <span class="func">tl.exp</span>(x - x_max)
+  x_sum = <span class="func">tl.sum</span>(x, axis=<span class="number">0</span>)
+  out = x / x_sum
+
+  out_ptrs = out_ptr + row * stride + offs
+  <span class="func">tl.store</span>(out_ptrs, out, mask=mask)</pre>
+    </div>
+  </div>
+</div>
+
+<!-- TRITON API QUICK REFERENCE -->
+<div class="mapping-section">
+  <h2>Triton API Quick Reference</h2>
+  <div class="api-grid">
+    <div class="api-card">
+      <h4>tl.program_id(axis)</h4>
+      <p>Returns the ID of the current program instance along the given axis (0, 1, or 2). Like <code>blockIdx.x/y/z</code> in CUDA.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.arange(start, end)</h4>
+      <p>Returns a 1D block of consecutive values [start, end). Used to compute offsets for the current program's tile.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.load(ptr, mask, other)</h4>
+      <p>Loads a block of data from memory. <code>mask</code> handles bounds; <code>other</code> is the default for masked-out elements.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.store(ptr, val, mask)</h4>
+      <p>Stores a block of data to memory. Only elements where <code>mask=True</code> are written.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.dot(a, b)</h4>
+      <p>Block-level matrix multiply. Auto-uses tensor cores when shapes are multiples of 16. Returns a 2D block.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.sum / tl.max / tl.min</h4>
+      <p>Block-level reductions along an axis. Replaces CUDA's warp shuffles + tree reduction. Single-line reductions!</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.where(cond, x, y)</h4>
+      <p>Element-wise ternary: returns <code>x</code> where cond is True, <code>y</code> otherwise. Replaces CUDA's divergent branches.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.constexpr</h4>
+      <p>Marks a parameter as compile-time constant. The kernel is recompiled for each unique value — enables aggressive optimization.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.exp / tl.log / tl.sqrt / tl.abs</h4>
+      <p>Element-wise math ops on blocks. Work exactly like their CUDA counterparts but on entire tiles at once.</p>
+    </div>
+    <div class="api-card">
+      <h4>tl.atomic_add(ptr, val)</h4>
+      <p>Atomic addition to global memory. Same semantics as CUDA's <code>atomicAdd</code>.</p>
+    </div>
+    <div class="api-card">
+      <h4>@triton.autotune</h4>
+      <p>Decorator that tests multiple configurations (BLOCK_SIZE, num_warps, num_stages) and picks the fastest one per input shape.</p>
+    </div>
+    <div class="api-card">
+      <h4>triton.testing.do_bench(fn)</h4>
+      <p>Reliable GPU benchmarking with proper warmup and timing. Returns median runtime in milliseconds.</p>
+    </div>
+  </div>
+</div>
+
+<!-- WARNINGS BOX -->
+<div class="warn-box">
+  <strong>⚠ Key Constraints to Remember:</strong><br>
+  • Block sizes <strong>must be powers of 2</strong> (64, 128, 256, 512, 1024...)<br>
+  • <code>tl.dot</code> needs shapes as multiples of <strong>16</strong> for tensor cores<br>
+  • No thread-level control — you cannot do warp-level primitives (<code>__shfl_sync</code>)<br>
+  • No explicit shared memory — the compiler decides what goes in SRAM<br>
+  • All pointers are raw — you compute addresses with pointer arithmetic<br>
+  • Kernel is <strong>recompiled</strong> for each unique set of <code>tl.constexpr</code> values
+</div>
+
+<!-- LAUNCH PATTERN -->
+<div class="mapping-section">
+  <h2>The Triton Launch Pattern</h2>
+  <div class="code-block triton" style="border: 1px solid var(--border); border-radius: 8px;">
+    <div class="code-block-header"><span class="dot"></span> Standard Launch Pattern</div>
+    <pre><span class="keyword">import</span> torch
+<span class="keyword">import</span> triton
+<span class="keyword">import</span> triton.language <span class="keyword">as</span> tl
+
+<span class="comment"># 1. Define kernel</span>
+<span class="keyword">@triton.jit</span>
+<span class="keyword">def</span> <span class="func">my_kernel</span>(in_ptr, out_ptr, N, BLOCK: <span class="func">tl.constexpr</span>):
+    pid = <span class="func">tl.program_id</span>(<span class="number">0</span>)
+    offs = pid * BLOCK + <span class="func">tl.arange</span>(<span class="number">0</span>, BLOCK)
+    mask = offs &lt; N
+    x = <span class="func">tl.load</span>(in_ptr + offs, mask=mask)
+    <span class="comment"># ... compute ...</span>
+    <span class="func">tl.store</span>(out_ptr + offs, x, mask=mask)
+
+<span class="comment"># 2. Wrapper function (handles tensor → pointer)</span>
+<span class="keyword">def</span> <span class="func">my_op</span>(x: torch.Tensor) -> torch.Tensor:
+    out = torch.empty_like(x)
+    N = x.numel()
+    BLOCK = <span class="number">1024</span>
+    grid = (<span class="func">triton.cdiv</span>(N, BLOCK),)  <span class="comment"># ceil(N / BLOCK)</span>
+    <span class="func">my_kernel</span>[grid](x, out, N, BLOCK=BLOCK)
+    <span class="keyword">return</span> out
+
+<span class="comment"># 3. Use it</span>
+x = torch.randn(<span class="number">10000</span>, device=<span class="string">'cuda'</span>)
+y = <span class="func">my_op</span>(x)</pre>
+  </div>
+</div>
+
+<!-- UP NEXT: FUSED RMSNORM -->
+<div class="up-next">
+  <span class="series-tag">Up Next in This Series</span>
+  <h2>Fused RMSNorm in Triton</h2>
+  <p>
+    The cheat sheet covers the mental model — next, I'm putting it to work. I'm currently implementing a
+    <strong>fused RMSNorm kernel in Triton</strong>, the normalization layer used in Llama, Mistral, and most modern LLMs.
+    It's a great first "real" kernel: a row-wise reduction fused with normalization and scaling, all in a single pass over HBM.
+  </p>
+  <p>
+    The write-up will cover building it up from a PyTorch baseline, walking through the Triton implementation with
+    <code>tl.sum</code> for the RMS computation, autotuning with <code>@triton.autotune</code>, and a full roofline analysis
+    comparing against <code>torch.compile</code> — the same profiling-driven workflow I use for my CUDA kernel work.
+  </p>
+  <p>
+    <strong>Stay tuned.</strong>
+  </p>
+</div>
+
+<footer>
+  Part 1 of the CUDA → Triton series &nbsp;·&nbsp; By <a href="https://linkedin.com/in/vijaykodamalla">Prabhas Kodamalla</a> &nbsp;·&nbsp; Georgia Tech
+</footer>
+
+</body>
+</html>
